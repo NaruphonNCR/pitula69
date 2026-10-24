@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Topology Status</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f7f8; --card: #ffffff; --line: #e5e7eb; --text: #111827; --muted: #6b7280;
+    --brand: #0f766e; --up: #16a34a; --down: #dc2626; --unknown: #9ca3af;
+    --up-bg: #ecfdf5; --down-bg: #fef2f2; --dev: #111827; --dev-text: #f9fafb; --dev-muted: #9ca3af;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b1215; --card: #121b1f; --line: #23313a; --text: #e5e7eb; --muted: #94a3b8;
+      --up-bg: #052e1c; --down-bg: #3b0a0a; --dev: #0f172a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b1215; --card: #121b1f; --line: #23313a; --text: #e5e7eb; --muted: #94a3b8;
+    --up-bg: #052e1c; --down-bg: #3b0a0a; --dev: #0f172a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: "IBM Plex Sans Thai", system-ui, sans-serif; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 40px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 22px; color: var(--brand); letter-spacing: .5px; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .mono { font-family: "IBM Plex Mono", monospace; }
+  .bar { margin-top: 16px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; background: var(--up); }
+  .dot.err { background: var(--down); }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 16px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+  .kpi .label { color: var(--muted); font-size: 13px; }
+  .kpi .val { font-size: 30px; font-weight: 700; margin-top: 4px; }
+  .tools { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  .tools input { flex: 1 1 220px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--text); font: inherit; }
+  .tools button { padding: 8px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--text); font: inherit; cursor: pointer; }
+  .tools button.on { background: var(--brand); color: #fff; border-color: var(--brand); }
+  .themebtn { padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--text); cursor: pointer; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 16px; }
+  .dev { background: var(--dev); color: var(--dev-text); border-radius: 6px; padding: 12px 14px; border-left: 4px solid var(--unknown); }
+  .dev.up { border-left-color: var(--up); }
+  .dev.down { border-left-color: var(--down); box-shadow: 0 0 0 1px var(--down); }
+  .dev .top { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+  .dev .name { font-weight: 600; overflow-wrap: anywhere; }
+  .badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
+  .badge.up { background: var(--up); color: #fff; }
+  .badge.down { background: var(--down); color: #fff; }
+  .badge.unknown { background: var(--unknown); color: #fff; }
+  .dev .meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--dev-muted); flex-wrap: wrap; }
+  .dev .detail { margin-top: 6px; font-size: 12px; color: var(--dev-muted); overflow-wrap: anywhere; }
+  .empty { color: var(--muted); padding: 30px; text-align: center; grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>SMART TOPOLOGY · STATUS</h1>
+      <div class="sub" id="org">สถานะเครื่องแม่ข่ายและอุปกรณ์เครือข่าย</div>
+    </div>
+    <button class="themebtn" id="theme" type="button" aria-label="สลับธีม">🌓</button>
+  </header>
+
+  <div class="bar">
+    <span><span class="dot" id="conn"></span> <b id="connText">กำลังเชื่อมต่อ…</b></span>
+    <span class="sub">อัปเดตล่าสุด <span class="mono" id="updated">-</span></span>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="label">อุปกรณ์ทั้งหมด</div><div class="val" id="kTotal">-</div></div>
+    <div class="kpi"><div class="label">Online</div><div class="val" style="color:var(--up)" id="kUp">-</div></div>
+    <div class="kpi"><div class="label">Offline</div><div class="val" style="color:var(--down)" id="kDown">-</div></div>
+    <div class="kpi"><div class="label">Availability</div><div class="val" id="kAvail">-</div></div>
+  </div>
+
+  <div class="tools">
+    <input id="q" type="search" placeholder="ค้นหาชื่อ / IP / ตำแหน่ง…">
+    <button type="button" data-f="all" class="on">ทั้งหมด</button>
+    <button type="button" data-f="up">ปกติ</button>
+    <button type="button" data-f="down">ออฟไลน์</button>
+  </div>
+
+  <div class="grid" id="grid"></div>
+</div>
+
+<script>
+  // ใช้ ?api=http://ip:8088 ได้ ถ้าเปิดไฟล์นี้จากเครื่องอื่น
+  const API = (new URLSearchParams(location.search).get("api") || "").replace(/\/$/, "") + "/api/status";
+  let data = null, filter = "all";
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const label = { up: "ONLINE", down: "LINK DOWN", unknown: "CHECKING" };
+
+  function since(iso) {
+    if (!iso) return "";
+    const s = Math.floor((Date.now() - new Date(iso)) / 1000);
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+    return h ? `${h} ชม. ${m} นาที` : `${m} นาที ${s % 60} วินาที`;
+  }
+
+  function render() {
+    if (!data) return;
+    const s = data.summary;
+    $("org").textContent = data.org_name;
+    $("kTotal").textContent = s.total;
+    $("kUp").textContent = s.up;
+    $("kDown").textContent = s.down;
+    $("kAvail").textContent = s.availability == null ? "-" : s.availability + "%";
+    $("updated").textContent = new Date(data.updated).toLocaleTimeString("th-TH");
+    const q = $("q").value.trim().toLowerCase();
+    // ให้อุปกรณ์ที่ล่มขึ้นก่อน
+    const order = { down: 0, unknown: 1, up: 2 };
+    const list = data.targets
+      .filter((t) => filter === "all" || t.status === filter)
+      .filter((t) => !q || `${t.name} ${t.address} ${t.location}`.toLowerCase().includes(q))
+      .sort((a, b) => order[a.status] - order[b.status] || a.name.localeCompare(b.name, "th"));
+    $("grid").innerHTML = list.length ? list.map((t) => `
+      <div class="dev ${t.status}">
+        <div class="top"><div class="name">${esc(t.name)}</div><span class="badge ${t.status}">${label[t.status]}</span></div>
+        <div class="meta"><span class="mono">${esc(t.address)}</span><span>${esc(t.location)}</span></div>
+        <div class="meta">
+          <span>${t.type.toUpperCase()}${t.latency_ms != null ? ` · <span class="mono">${t.latency_ms} ms</span>` : ""}</span>
+          <span>${t.uptime_percent != null ? `Uptime ${t.uptime_percent}%` : ""}</span>
+        </div>
+        <div class="detail">${t.status === "down" ? `ล่มมาแล้ว ${since(t.down_since)} · ` : ""}${esc(t.detail)}</div>
+      </div>`).join("") : `<div class="empty">ไม่พบอุปกรณ์</div>`;
+  }
+
+  async function load() {
+    try {
+      const res = await fetch(API, { cache: "no-store" });
+      if (!res.ok) throw new Error(res.status);
+      data = await res.json();
+      $("conn").classList.remove("err");
+      $("connText").textContent = "Monitoring";
+    } catch (e) {
+      $("conn").classList.add("err");
+      $("connText").textContent = "เชื่อมต่อ Monitor ไม่ได้";
+    }
+    render();
+  }
+
+  $("q").addEventListener("input", render);
+  document.querySelectorAll("[data-f]").forEach((b) => b.addEventListener("click", () => {
+    filter = b.dataset.f;
+    document.querySelectorAll("[data-f]").forEach((x) => x.classList.toggle("on", x === b));
+    render();
+  }));
+  $("theme").addEventListener("click", () => {
+    const dark = document.documentElement.dataset.theme
+      ? document.documentElement.dataset.theme === "dark"
+      : matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.dataset.theme = dark ? "light" : "dark";
+    try { localStorage.setItem("theme", document.documentElement.dataset.theme); } catch (e) {}
+  });
+  try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+
+  load();
+  setInterval(load, 10000);
+</script>
+</body>
+</html>

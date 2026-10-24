@@ -19,6 +19,7 @@ import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from datetime import datetime, timedelta, timezone
 
 MOPH_NOTIFY_URL = "https://morpromt2f.moph.go.th/api/notify/send"
@@ -227,31 +228,95 @@ class TargetState:
         self.down_since = None
         self.last_reminder = None
         self.next_check = 0.0
+        self.latency = None
+        self.detail = ""
+        self.last_check = None
+        self.checks = 0
+        self.ups = 0
 
 
-def save_status(path, targets, states):
+def iso(ts):
+    return ts and datetime.fromtimestamp(ts, TH_TZ).isoformat(timespec="seconds")
+
+
+def build_status(targets, states, cfg):
     data = []
     for t in targets:
         st = states[t["name"]]
         data.append({
+            "id": t.get("id", t["name"]),
             "name": t["name"],
+            "type": t.get("type", "icmp").lower(),
             "address": target_address(t),
+            "location": t.get("location", ""),
             "status": "unknown" if st.status is None else ("up" if st.status else "down"),
-            "down_since": st.down_since and datetime.fromtimestamp(st.down_since, TH_TZ).isoformat(),
+            "latency_ms": None if st.latency is None else round(st.latency, 2),
+            "detail": st.detail,
+            "last_check": iso(st.last_check),
+            "down_since": iso(st.down_since),
+            "uptime_percent": round(st.ups * 100 / st.checks, 2) if st.checks else None,
         })
+    up = sum(1 for d in data if d["status"] == "up")
+    down = sum(1 for d in data if d["status"] == "down")
+    return {
+        "org_name": cfg["org_name"],
+        "updated": datetime.now(TH_TZ).isoformat(timespec="seconds"),
+        "summary": {"total": len(data), "up": up, "down": down,
+                    "availability": round(up * 100 / len(data), 1) if data else None},
+        "targets": data,
+    }
+
+
+def save_status(path, status):
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump({"updated": datetime.now(TH_TZ).isoformat(), "targets": data}, f,
-                  ensure_ascii=False, indent=2)
+        json.dump(status, f, ensure_ascii=False, indent=2)
     os.replace(tmp, path)
+
+
+def start_http_server(port, get_status):
+    """เปิด API ให้หน้า Dashboard ดึงสถานะ: GET /api/status และหน้าเว็บ GET /"""
+    page_path = os.path.join(BASE_DIR, "status.html")
+
+    class Handler(BaseHTTPRequestHandler):
+        def _send(self, code, body, ctype):
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):  # noqa: N802
+            path = self.path.split("?", 1)[0]
+            if path in ("/api/status", "/status.json"):
+                body = json.dumps(get_status(), ensure_ascii=False).encode("utf-8")
+                self._send(200, body, "application/json; charset=utf-8")
+            elif path in ("/", "/status.html") and os.path.exists(page_path):
+                with open(page_path, "rb") as f:
+                    self._send(200, f.read(), "text/html; charset=utf-8")
+            else:
+                self._send(404, b"not found", "text/plain")
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    log(f"เปิดหน้าสถานะที่ http://<ip-เครื่องนี้>:{port}/  (API: /api/status)")
 
 
 def process(target, state, cfg, keys, dry_run):
     ok, latency, detail = run_check(target, cfg["timeout"])
     retries = 1 if cfg["once"] else int(target.get("retries", cfg["retries"]))
     now = time.time()
+    state.last_check = now
+    state.detail = detail
+    state.latency = latency if ok else None
+    state.checks += 1
 
     if ok:
+        state.ups += 1
         state.fail_count = 0
         state.success_count += 1
         if state.status is False:
@@ -314,6 +379,7 @@ def main():
         "notify_on_start": raw.get("notify_on_start", True),
         "org_name": raw.get("org_name", "Smart Topology NOC"),
         "status_file": raw.get("status_file", ""),
+        "http_port": int(raw.get("http_port", 0)),
         "once": args.once,
     }
     targets = [t for t in raw["targets"] if t.get("enabled", True)]
@@ -327,6 +393,8 @@ def main():
     states = {t["name"]: TargetState() for t in targets}
     log(f"เริ่มตรวจสอบ {len(targets)} อุปกรณ์ ทุก {cfg['interval']} วินาที"
         f"{' (DRY-RUN)' if args.dry_run else ''}")
+    if cfg["http_port"] and not args.once:
+        start_http_server(cfg["http_port"], lambda: build_status(targets, states, cfg))
 
     with ThreadPoolExecutor(max_workers=min(32, max(1, len(targets)))) as pool:
         while True:
@@ -336,7 +404,8 @@ def main():
                 states[t["name"]].next_check = now + t.get("interval_seconds", cfg["interval"])
             list(pool.map(lambda t: process(t, states[t["name"]], cfg, keys, args.dry_run), due))
             if cfg["status_file"]:
-                save_status(os.path.join(BASE_DIR, cfg["status_file"]), targets, states)
+                save_status(os.path.join(BASE_DIR, cfg["status_file"]),
+                            build_status(targets, states, cfg))
             if args.once:
                 break
             time.sleep(1)

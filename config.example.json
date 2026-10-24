@@ -6,9 +6,10 @@
   "reminder_minutes": 30,
   "notify_on_start": true,
   "status_file": "status.json",
+  "http_port": 8088,
   "targets": [
-    { "name": "FortiGate 100F", "type": "icmp", "host": "10.0.0.1", "location": "Data Center" },
-    { "name": "Cisco Catalyst 9300-24T (Core)", "type": "icmp", "host": "10.0.0.2", "location": "Data Center" },
+    { "id": "fortigate-100f", "name": "FortiGate 100F", "type": "icmp", "host": "10.0.0.1", "location": "Data Center" },
+    { "id": "core-9300", "name": "Cisco Catalyst 9300-24T (Core)", "type": "icmp", "host": "10.0.0.2", "location": "Data Center" },
     { "name": "HIS Master (MySQL)", "type": "tcp", "host": "10.0.0.10", "port": 3306, "location": "Data Center" },
     { "name": "HIS Slave (MySQL)", "type": "tcp", "host": "10.0.0.11", "port": 3306, "location": "Data Center" },
     { "name": "เว็บไซต์โรงพยาบาล", "type": "http", "url": "https://www.example.go.th", "expect_status": [200], "interval_seconds": 120 },

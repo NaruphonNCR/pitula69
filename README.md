@@ -9,11 +9,12 @@
 - แจ้ง ONLINE เมื่อกลับมา พร้อมบอกว่าล่มนานเท่าไร
 - แจ้งซ้ำทุก `reminder_minutes` นาทีถ้ายังล่มอยู่ (ตั้ง 0 = ไม่แจ้งซ้ำ)
 - ข้อความเป็น Flex Message สีแดง/เขียว อ่านง่ายบนมือถือ
-- เขียนสถานะลง `status.json` ให้หน้า Dashboard (Smart Topology) ดึงไปแสดงได้
+- มีหน้าเว็บแสดงสถานะในตัว (`status.html`) และ API `GET /api/status` ให้หน้า Smart Topology ดึงไปแสดงได้
+- เขียนสถานะลงไฟล์ `status.json` ด้วย (ถ้าตั้งค่า `status_file`)
 
 ## วิธีติดตั้ง (Linux)
 ```bash
-sudo mkdir -p /opt/moph-monitor && sudo cp monitor.py config.example.json .env.example moph-monitor.service /opt/moph-monitor/
+sudo mkdir -p /opt/moph-monitor && sudo cp monitor.py status.html topology-status.js config.example.json .env.example moph-monitor.service /opt/moph-monitor/
 cd /opt/moph-monitor
 sudo cp .env.example .env            # ใส่ MOPH_CLIENT_KEY / MOPH_SECRET_KEY
 sudo cp config.example.json config.json   # แก้รายการอุปกรณ์
@@ -36,5 +37,32 @@ journalctl -u moph-monitor -f        # ดู log
 | `location` | ตำแหน่ง เช่น Data Center |
 | `interval_seconds`, `retries` | กำหนดเฉพาะอุปกรณ์ (ไม่ใส่ = ใช้ค่ากลาง) |
 | `enabled` | `false` = ปิดชั่วคราว |
+| `id` | รหัสอุปกรณ์ ใช้ผูกกับการ์ดบนหน้า Dashboard (ไม่ใส่ = ใช้ `name`) |
+
+## หน้าแสดงสถานะ และการเชื่อมกับ Dashboard
+ตั้ง `"http_port": 8088` ใน `config.json` แล้วเปิด `http://<ip-เครื่อง-monitor>:8088/` จะเห็นหน้าสถานะ
+(การ์ด Online / Offline / Availability, ค้นหา, กรองเฉพาะเครื่องที่ล่ม, รองรับมือถือและโหมดมืด)
+
+ข้อมูล JSON ดึงได้ที่ `http://<ip>:8088/api/status` (เปิด CORS แล้ว เรียกจากหน้าเว็บอื่นได้)
+
+ถ้าจะให้หน้า **Smart Topology** เปลี่ยนป้าย LINK DOWN / ONLINE ตามจริง:
+```html
+<script src="topology-status.js"></script>
+<div class="node" data-monitor-id="fortigate-100f">
+  FortiGate 100F <span data-monitor-status="fortigate-100f"></span>
+</div>
+<script>
+  TopologyStatus.start("http://10.0.X.X:8088", function (data) {
+    if (!data) return;                          // เชื่อมต่อไม่ได้
+    document.querySelector("#online").textContent = data.summary.up;
+    document.querySelector("#offline").textContent = data.summary.down;
+  });
+</script>
+<style>
+  .node.is-down { outline: 2px solid #dc2626; }
+  .node.is-up   { outline: 2px solid #16a34a; }
+</style>
+```
+> ควรเปิดพอร์ต 8088 เฉพาะในวงแลนโรงพยาบาลเท่านั้น
 
 > หมายเหตุ: ไฟล์ `.env` และ `config.json` (มีคีย์และ IP จริง) ถูกใส่ไว้ใน `.gitignore` แล้ว ไม่ถูก push ขึ้น GitHub
