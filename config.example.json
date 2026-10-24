@@ -1,0 +1,17 @@
+{
+  "org_name": "Smart Topology NOC - โรงพยาบาล",
+  "interval_seconds": 60,
+  "timeout_seconds": 5,
+  "retries": 3,
+  "reminder_minutes": 30,
+  "notify_on_start": true,
+  "status_file": "status.json",
+  "targets": [
+    { "name": "FortiGate 100F", "type": "icmp", "host": "10.0.0.1", "location": "Data Center" },
+    { "name": "Cisco Catalyst 9300-24T (Core)", "type": "icmp", "host": "10.0.0.2", "location": "Data Center" },
+    { "name": "HIS Master (MySQL)", "type": "tcp", "host": "10.0.0.10", "port": 3306, "location": "Data Center" },
+    { "name": "HIS Slave (MySQL)", "type": "tcp", "host": "10.0.0.11", "port": 3306, "location": "Data Center" },
+    { "name": "เว็บไซต์โรงพยาบาล", "type": "http", "url": "https://www.example.go.th", "expect_status": [200], "interval_seconds": 120 },
+    { "name": "Switch ห้อง CT-SCAN", "type": "icmp", "host": "10.0.0.30", "location": "CT-SCAN", "enabled": false }
+  ]
+}
